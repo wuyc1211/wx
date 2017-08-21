@@ -19,7 +19,7 @@ def getToken(request):
         if fromm != wx_from:
             return HttpResponse(json.dumps({'token': 'invalid'}), content_type='application/json')
         data = json.loads(data)
-        print(data)
+        # print(data)
 
         openid = data['openid']
         nick_name = data['userInfo']['nickName']
@@ -29,7 +29,7 @@ def getToken(request):
         avatarUrl = data['userInfo']['avatarUrl']
 
         user, created = User.objects.get_or_create(username=openid + '-' + nick_name , password=openid)
-        print(user)
+        # print(user)
 
         if user:
             wxuser, created = WxUser.objects.get_or_create(user=user, open_id=openid, nick_name=nick_name, city=city, gender=gender, province=province, avatarUrl=avatarUrl)
@@ -39,9 +39,6 @@ def getToken(request):
             return HttpResponse(json.dumps({'token': str(token)}), content_type='application/json')
 
         return HttpResponse(json.dumps({'token': 'invalid'}), content_type='application/json')
-    else:
-        # print(request.GET)
-        return HttpResponse('Error: only post is allowed!')
 
 
 class CreateOrderView(APIView):
