@@ -19,7 +19,7 @@ def getToken(request):
         if fromm != wx_from:
             return HttpResponse(json.dumps({'token': 'invalid'}), content_type='application/json')
         data = json.loads(data)
-        # print(data)
+        print(data)
 
         openid = data['openid']
         nick_name = data['userInfo']['nickName']
@@ -29,11 +29,16 @@ def getToken(request):
         avatarUrl = data['userInfo']['avatarUrl']
 
         user, created = User.objects.get_or_create(username=openid + '-' + nick_name , password=openid)
-        # print(user)
-
+        print(user, created)
+        
         if user:
-            wxuser, created = WxUser.objects.get_or_create(user=user, open_id=openid, nick_name=nick_name, city=city, gender=gender, province=province, avatarUrl=avatarUrl)
-            # wxuser, created = WxUser.objects.get_or_create(user=user, open_id=openid, nick_name=nick_name)
+            wxuser, created = WxUser.objects.get_or_create(user=user, open_id=openid)
+            wxuser.nick_name=nick_name
+            wxuser.city=city
+            wxuser.gender=gender
+            wxuser.province=province
+            wxuser.avatarUrl=avatarUrl
+            wxuser.save()
             print(wxuser)
             token, created2 = Token.objects.get_or_create(user=user)
             return HttpResponse(json.dumps({'token': str(token)}), content_type='application/json')
@@ -84,16 +89,17 @@ class WxUserDetail(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = WxUserSerializer
 
     def get_queryset(self):
-        self.queryset = WxUser.objects.filter(user=self.request.user, id=self.kwargs['pk'])
+        if self.request.method != 'GET':
+            self.queryset = WxUser.objects.filter(user=self.request.user, id=self.kwargs['pk'])
         return super(WxUserDetail, self).get_queryset()
 
 
 class OrderList(APIView):
     def get(self, request, format=None):
         user = request.user
-        print(user.WxUser)
-        orders = Order.objects.filter(wxuser=user.WxUser)
+        orders = Order.objects.filter(wxuser=user.WxUser).order_by('-created')
         s = OrderSerializer(orders, many=True, context={'request':request})
+        print('get order list success')
         return Response(s.data)
 
     def post(self, request, format=None):
@@ -110,21 +116,22 @@ class OrderDetail(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = OrderSerializer
     
     def get_queryset(self):
-        self.queryset = Order.objects.filter(wxuser=self.request.user.WxUser, id=self.kwargs['pk'])
+        if self.request.method != 'GET':
+            self.queryset = Order.objects.filter(wxuser=self.request.user.WxUser, id=self.kwargs['pk'])
+        else:
+            self.queryset = Order.objects.all()
         return super(OrderDetail, self).get_queryset()
 
 
 class OrderDataList(APIView):
     def get(self, request, order_id, format=None):
-        print(order_id)
+        print('OrderDataList enter, get order id:', order_id)
         order = Order.objects.get(id=order_id)
-        
-        if not order:
-            return Response('invalid order id', status=status.HTTP_204_NO_CONTENT)
-        if order.wxuser == request.user.WxUser:
-            data = OrderData.objects.filter(order=order)
-            s = OrderDataSerializer(data, many=True, context={'request':request})
-            return Response(s.data, status=status.HTTP_200_OK)
+        data = order.order_data.values()
+        print('order data is:', data)
+
+        s = OrderDataSerializer(data, many=True, context={'request':request})
+        return Response(s.data, status=status.HTTP_200_OK)
     
     def post(self, request, order_id, format=None):
         order = Order.objects.get(id=order_id)
@@ -147,6 +154,9 @@ class OrderDataDetail(generics.RetrieveUpdateDestroyAPIView):
         order_id = self.kwargs['order_id']
         pk = self.kwargs['pk']
         self.queryset = OrderData.objects.filter(id=pk, order=order_id)
-        if self.queryset:
+        # if self.request.method == 'GET':
+        #     super(OrderDataDetail, self).get_queryset()
+        # else:
+        if self.queryset and self.request.method != 'GET':
             assert self.queryset[0].order.wxuser == self.request.user.WxUser
         return super(OrderDataDetail, self).get_queryset()
